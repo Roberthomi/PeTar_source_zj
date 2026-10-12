@@ -17,18 +17,21 @@ export PATH="$HOME/opt/petar-arm-bse/bin:$HOME/bin:$PATH"
 export PYTHONPATH="$HOME/opt/petar-arm-bse/include${PYTHONPATH:+:$PYTHONPATH}"
 export UCX_VFS_ENABLE=n
 export OMP_STACKSIZE=128M
-export OMP_NUM_THREADS=4
+export OMP_NUM_THREADS=1
 export OMP_DYNAMIC=false
-export OMP_PROC_BIND=false
-unset OMP_PLACES
+export OMP_PROC_BIND=close
+export OMP_PLACES=cores
 ulimit -s unlimited
 
 PETAR_BIN=${PETAR_BIN:-$HOME/opt/petar-arm-bse/bin/petar}
-PETAR_INIT=${PETAR_INIT:-$HOME/opt/petar-arm-bse/bin/petar.init}
-MCLUSTER_BIN=${MCLUSTER_BIN:-$HOME/bin/mcluster}
 PETAR_GETHER=${PETAR_GETHER:-$HOME/opt/petar-arm-bse/bin/petar.data.gether}
 PETAR_PROCESS=${PETAR_PROCESS:-$HOME/opt/petar-arm-bse/bin/petar.data.process}
 EXPECTED_CPU_TARGET=${EXPECTED_CPU_TARGET:-tsv110}
+
+# Restart source on the server.  It is copied into the new run directory, so
+# the original job directory is never modified or appended to.
+RESTART_ROOT=${RESTART_ROOT:-/home/share/nsls_zym/petar_runs/singlestar_M210000_job1785412}
+RESTART_SNAPSHOT=${RESTART_SNAPSHOT:-$RESTART_ROOT/data.8}
 
 # BSE links PeTar to the GNU Fortran runtime.  Locate the matching GCC runtime
 # explicitly because HPCKit may not expose it on compute nodes.
@@ -74,14 +77,22 @@ MERGER_RADIUS_RSUN=${MERGER_RADIUS_RSUN:-1e-6}
 # snapshots (about 331 by t=3300).  Allow roughly 10 GB including analysis.
 END_TIME=10000
 OUTPUT_INTERVAL=5
-MPI_RANKS=32
-OMP_THREADS=4
+MPI_RANKS=128
+OMP_THREADS=1
+TREE_THETA=0.60
 
 RUN_ROOT=${RUN_ROOT:-$HOME/petar_runs/singlestar_M210000_job${CCS_JOB_ID:-manual}}
 
-for program in "$PETAR_BIN" "$PETAR_INIT" "$MCLUSTER_BIN" "$PETAR_GETHER" "$PETAR_PROCESS"; do
+for program in "$PETAR_BIN" "$PETAR_GETHER" "$PETAR_PROCESS"; do
     if [ ! -x "$program" ]; then
         echo "ERROR: missing executable: $program" >&2
+        exit 2
+    fi
+done
+for restart_file in "$RESTART_SNAPSHOT" "$RESTART_ROOT/input.par" \
+                    "$RESTART_ROOT/input.par.bse" "$RESTART_ROOT/input.par.hard"; do
+    if [ ! -r "$restart_file" ]; then
+        echo "ERROR: missing restart file: $restart_file" >&2
         exit 2
     fi
 done
@@ -114,31 +125,26 @@ fi
 
 mkdir -p "$RUN_ROOT"
 cp "$0" "$RUN_ROOT/submitted_script.sh"
+cp "$RESTART_ROOT/input.par" "$RESTART_ROOT/input.par.bse" \
+   "$RESTART_ROOT/input.par.hard" "$RUN_ROOT/"
+cp "$RESTART_SNAPSHOT" "$RUN_ROOT/restart.data.8"
 cd "$RUN_ROOT"
 
 echo "Run directory: $RUN_ROOT"
-echo "Generating McLuster initial conditions at $(date --iso-8601=seconds)"
-export OMP_NUM_THREADS=8
-taskset -c 0-31 "$MCLUSTER_BIN" \
-  -M 210000 -m 0.7 -P 0 -R 1.621849 -f 0 -u 1 -C 5 \
-  -B 0 -s 20261001 -o cluster > mc.log 2>&1
-
-taskset -c 0 "$PETAR_INIT" -s bse -v kms2pcmyr \
-  -f input cluster.dat.10 > petar_init.log 2>&1
-
-NSTAR=$(awk 'NR==1 {print $2}' input)
-echo "Initial condition ready: N=$NSTAR, M=210000 Msun, m=0.7 Msun, Rh=1.04381 pc"
+echo "Restart source: $RESTART_SNAPSHOT (N=300000, t=40)"
 
 export OMP_NUM_THREADS=$OMP_THREADS
-echo "Starting PeTar with system scheduling: $MPI_RANKS MPI x $OMP_THREADS OpenMP, t=$END_TIME, o=$OUTPUT_INTERVAL"
+echo "Starting PeTar with system scheduling: $MPI_RANKS MPI x $OMP_THREADS OpenMP, theta=$TREE_THETA, t=$END_TIME, o=$OUTPUT_INTERVAL"
 echo "Custom merger radius: $MERGER_RADIUS_RSUN Rsun"
 echo "Start time: $(date --iso-8601=seconds)"
 
 mpirun \
   -x PATH -x LD_LIBRARY_PATH -x UCX_TLS=sm,rc \
-  -x OMP_NUM_THREADS -x OMP_STACKSIZE -x OMP_DYNAMIC -x OMP_PROC_BIND \
+  -x OMP_NUM_THREADS -x OMP_STACKSIZE -x OMP_DYNAMIC -x OMP_PROC_BIND -x OMP_PLACES \
   -x UCX_VFS_ENABLE \
-  --bind-to none \
+  --map-by "ppr:${MPI_RANKS}:node:PE=${OMP_THREADS}" \
+  --bind-to core \
+  --report-bindings \
   --mca grpcomm_direct_priority 100 \
   --mca coll_tuned_use_dynamic_rules true \
   -x UCX_RNDV_THRESH=512K \
@@ -148,10 +154,11 @@ mpirun \
   --mca plm_rsh_agent /usr/bin/ssh \
   -np "$MPI_RANKS" \
   "$PETAR_BIN" \
+    -p input.par \
     --debug_lessmerger "$MERGER_RADIUS_RSUN" \
     --energy-err-hard 1e-3 \
-    -a 0 -u 1 -b 0 --stellar-evolution 2 \
-    -i 2 -t "$END_TIME" -o "$OUTPUT_INTERVAL" input \
+    --write-group-info 0 \
+    -a 0 -i 0 -T "$TREE_THETA" -t "$END_TIME" -o "$OUTPUT_INTERVAL" restart.data.8 \
     > output.log 2>&1
 
 echo "PeTar completed at $(date --iso-8601=seconds)"

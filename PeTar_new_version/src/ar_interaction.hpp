@@ -1390,8 +1390,30 @@ public:
                         p2->star = p2_star_bk;
 #ifdef BHMERGER
                         if (bh_bh_merger_managed) {
-                            refreshBHMergerPrediction(
-                                _bin, *p1, *p2, _bin_interrupt.time_now);
+                            const bool members_changed =
+                                p1->getBinaryPairID() != p2->id
+                                || p2->getBinaryPairID() != p1->id;
+                            const bool prediction_missing =
+                                p1->time_merger < 0.0
+                                || p2->time_merger < 0.0;
+                            const bool clearly_perturbed =
+                                isBHMergerOrbitClearlyPerturbed(
+                                    _bin, *p1, *p2);
+
+                            // BSE may report Roche/contact/coalescence repeatedly
+                            // for the same compact BH-BH orbit.  Replacing the
+                            // Peters deadline on every such callback would move it
+                            // forward by one fresh lifetime forever.  Preserve the
+                            // accumulated inspiral clock unless the members changed,
+                            // no prediction exists, or dynamics materially changed
+                            // the osculating orbit.  A real strong encounter can
+                            // therefore advance or delay the merger, while repeated
+                            // BSE terminal-event notifications cannot postpone it.
+                            if (members_changed || prediction_missing
+                                || clearly_perturbed)
+                                refreshBHMergerPrediction(
+                                    _bin, *p1, *p2,
+                                    _bin_interrupt.time_now);
                             const Float next_bh_check =
                                 std::max(_bin_interrupt.time_now,
                                          std::max(p1->time_merger,

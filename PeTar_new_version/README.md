@@ -87,6 +87,20 @@ The compact-pair gravitational-wave prescription retains its own dispatch.
 With `--stellar-evolution 1`, BSE retains its configured tidal behavior at
 all eccentricities and the additional dynamical tide is inactive.
 
+For unbound compact-object encounters, the mode-2 prescription applies the
+Hansen (1972) / Turner (1977) quadrupole energy loss and the corresponding
+angular-momentum loss after periapsis. In terms of the semi-latus rectum
+`p = a(1-e^2)`, the latter uses
+
+```text
+Delta L = 8 G^3 (m1 m2)^2 g_L(e) / (5 c^5 p^2).
+```
+
+The factor `1/5` is fixed by the parabolic Peters limit,
+`Delta L = 6 pi G^3 (m1 m2)^2 / (c^5 r_peri^2)`. Earlier source versions used
+`1/15`, underestimating the angular-momentum loss by a factor of three. The GW
+energy-loss expression was already correctly normalized and is unchanged.
+
 BSE receives a cutoff local to each evolution call and checks it at every
 internal evolution step, in both detached and mass-transfer tidal branches.
 The shared `tflag` is never temporarily changed. The legacy Fortran entry

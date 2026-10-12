@@ -82,6 +82,8 @@ This is an operator-split, orbit-averaged prescription, not phase-resolved PN
 integration or a waveform model. The callback timing, timestep convergence,
 and long-duration production accuracy remain modeling limitations documented
 under `PeTar_new_version/test/`.
+10.12 修复了一个bug这个bug会导致并和时间判定的黑洞并和被无限延后
+
 
 ## Local stability fixes
 

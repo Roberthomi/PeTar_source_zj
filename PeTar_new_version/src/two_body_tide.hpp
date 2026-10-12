@@ -65,9 +65,11 @@ public:
         Float G_over_r7 = G_over_r3 * G_over_r3 * G_over_r;
         Float Etid = 2.0 * sqrt(G_over_r7 * mtot) * m12sq * ge / (15.0 * c5);
 
-        // calculate the angular momentum loss (Hansen 1972)
+        // Calculate the angular-momentum loss (Hansen 1972).  The 1/5
+        // normalization is required by the parabolic Peters limit:
+        // Delta L(e->1) = 6*pi*G^3*(m1*m2)^2/(c^5*r_peri^2).
         ge = (COMM::PI - theta0) * (8.0 + 7*e2) + sqrt(e2 - 1) * (13 + 2*e2);
-        Float Ltid = 8.0 * G_over_r3 * p * m12sq * ge / (15.0 * c5);
+        Float Ltid = 8.0 * G_over_r3 * p * m12sq * ge / (5.0 * c5);
 
 
         // update binary orbit
