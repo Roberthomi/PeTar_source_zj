@@ -110,10 +110,30 @@ public:
         if (!(p1.merger_semi>0.0 && p2.merger_semi>0.0)) return false;
         const Float saved_a = 0.5*(p1.merger_semi+p2.merger_semi);
         const Float saved_e = 0.5*(p1.merger_ecc+p2.merger_ecc);
-        // Ignore integrator roundoff. A 0.1% energy-scale change or an absolute
-        // 1e-3 eccentricity change is large enough to invalidate the clock.
-        return std::fabs(bin.semi-saved_a) > 1.0e-3*std::fabs(saved_a)
-            || std::fabs(bin.ecc-saved_e) > 1.0e-3;
+        if (!(bin.semi>0.0 && bin.ecc>=0.0 && bin.ecc<1.0)
+            || !(saved_a>0.0 && saved_e>=0.0 && saved_e<1.0)
+            || !std::isfinite(bin.semi) || !std::isfinite(bin.ecc)
+            || !std::isfinite(saved_a) || !std::isfinite(saved_e))
+            return true;
+
+        // Compare the dominant logarithmic Peters-lifetime scaling instead of
+        // imposing a fixed |delta e| threshold.  Near e=1, even a tiny physical
+        // eccentricity change can alter the inspiral time enormously, whereas the
+        // polynomial Peters correction remains finite and is sub-dominant:
+        //     log(t_GW) ~= 4 log(a) + (7/2) log(1-e^2) + constant.
+        // log1p keeps the eccentricity term accurate for highly eccentric orbits.
+        // The full Peters expression is still used when a new deadline is set.
+        const Float delta_log_tgw =
+            4.0*(std::log(bin.semi)-std::log(saved_a))
+            + 3.5*(std::log1p(-bin.ecc*bin.ecc)
+                   - std::log1p(-saved_e*saved_e));
+
+        // Ignore small osculating-orbit and integration noise.  Refresh the
+        // deadline only when the dominant predicted lifetime becomes at least
+        // 10% shorter or 10% longer than the saved prediction.
+        return !std::isfinite(delta_log_tgw)
+            || delta_log_tgw < std::log(0.9)
+            || delta_log_tgw > std::log(1.1);
     }
 #endif
 

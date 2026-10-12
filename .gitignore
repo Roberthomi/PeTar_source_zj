@@ -58,11 +58,8 @@ PeTar_new_version/galpy-interface/petar.galpy.pot.movie
 cuda-*/
 .deps/
 diagnostics/
-/speedtest/*
-!/speedtest/README.md
-!/speedtest/plummer_single_core_benchmark.py
-!/speedtest/cusp_single_core_benchmark.py
-!/speedtest/plot_total_time.py
+/speedtest/
+
 /sample/
 /tidletest/
 
