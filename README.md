@@ -74,6 +74,9 @@ path:
   `-deltaM * Vcm + Mf * Vk`;
 - remnant mass, Kerr-spin magnitude/direction, and recoil are validated before
   being applied, with the spin retained for hierarchical mergers;
+- `petar.init --bhmerger` initializes the three Kerr-spin components, while
+  ASCII snapshots write and restore them on restart (`--blackhole` enables the
+  BHMERGER input format automatically);
 - each accepted event records both progenitors, their pre-merger positions,
   velocities and spins, the binary orbit, and the final remnant in a shared
   `*.bhmerger` output protected by process and thread locks.

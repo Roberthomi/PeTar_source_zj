@@ -172,6 +172,10 @@ public:
 #ifdef BSE_BASE
         star.writeAscii(fp);
 #endif
+#ifdef BHMERGER
+        fprintf(fp, "%26.17e %26.17e %26.17e ",
+                this->spin.x, this->spin.y, this->spin.z);
+#endif
     }
 
     //! read class data with ASCII format
@@ -191,6 +195,15 @@ public:
         }
 #ifdef BSE_BASE
         star.readAscii(fp);
+#endif
+#ifdef BHMERGER
+        rcount=fscanf(fp, "%lf %lf %lf",
+                     &this->spin.x, &this->spin.y, &this->spin.z);
+        if(rcount<3) {
+            std::cerr<<"Error: BH merger spin reading fails! requiring data number is 3, only obtain "<<rcount<<".\n";
+            std::cerr<<"Generate initial data with petar.init --bhmerger and use snapshots written by a BHMERGER-enabled PeTar build\n";
+            abort();
+        }
 #endif
     }
 #else
@@ -256,6 +269,9 @@ public:
 #ifdef BSE_BASE
         star.print(fout);
 #endif
+#ifdef BHMERGER
+        fout<<" spin="<<spin;
+#endif
 #endif
     }
 
@@ -280,6 +296,11 @@ public:
              <<std::setw(_width)<<"t_interrupt";
 #ifdef BSE_BASE
         StarParameter::printColumnTitle(_fout, _width);
+#endif
+#ifdef BHMERGER
+        _fout<<std::setw(_width)<<"spin.x"
+             <<std::setw(_width)<<"spin.y"
+             <<std::setw(_width)<<"spin.z";
 #endif
 #endif
     }
@@ -312,6 +333,11 @@ public:
 #ifdef BSE_BASE
         counter = StarParameter::printTitleWithMeaning(_fout, counter, _offset);
 #endif
+#ifdef BHMERGER
+        counter++;
+        _fout<<std::setw(_offset)<<" "<<counter<<"-"<<counter+2<<". spin.[x/y/z]: dimensionless black-hole spin vector (0.0)\n";
+        counter+=2;
+#endif
 #endif
         return counter;
     }
@@ -337,6 +363,11 @@ public:
              <<std::setw(_width)<<time_interrupt;
 #ifdef BSE_BASE
         star.printColumn(_fout, _width);
+#endif
+#ifdef BHMERGER
+        _fout<<std::setw(_width)<<spin.x
+             <<std::setw(_width)<<spin.y
+             <<std::setw(_width)<<spin.z;
 #endif
 #endif
     }
@@ -364,6 +395,11 @@ public:
              <<std::setw(_width)<<time_interrupt;
 #ifdef BSE_BASE
         star.printColumn(_fout, _width);
+#endif
+#ifdef BHMERGER
+        _fout<<std::setw(_width)<<spin.x
+             <<std::setw(_width)<<spin.y
+             <<std::setw(_width)<<spin.z;
 #endif
 #endif
     }

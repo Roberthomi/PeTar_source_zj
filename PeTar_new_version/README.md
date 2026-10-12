@@ -1256,6 +1256,14 @@ The particle data file should consist of 7 columns: mass, position (3 coordinate
 
 If stellar evolution is activated, the corresponding options `-s [bse_name]` should be used concurrently to generate the correct initial files. In such cases, it is recommended to utilize astronomical units (Solar mass [Msun], parsec [pc], and Million years [Myr]) for the initial data. The velocity unit should be specified as pc/Myr, ensuring a mass scaling factor of 1.0 between PeTar units and SSE/BSE-based code. Additionally, the `-u 1` option should be added to the `petar` command to adopt this astronomical unit set.
 
+For a PeTar executable configured with `--enable-bhmerger`, also pass
+`--bhmerger` to `petar.init`. This appends the three BHMERGER Kerr-spin vector
+components and initializes them to zero. `--blackhole` enables this format
+automatically. ASCII snapshots retain these components, so a later restart
+restores remnant spins for hierarchical mergers. A BHMERGER-enabled executable
+must be given an input or restart snapshot containing these columns; snapshots
+from the older format need to be converted first.
+
 Similarly, when external mode (potential) is enabled, the `-t` option should be utilized to ensure the correct number of columns is generated.
 
 ### Determining the Tree Time Step

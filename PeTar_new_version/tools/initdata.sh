@@ -15,6 +15,9 @@ do
 	    echo '  -s [S] Add stellar evolution columns: base | bse | no (default: no)';
 	    echo '  --blackhole Initialize every object as a BSE black hole (kw=14).';
 	    echo '         Requires "-s bse"; sets m0=mt=mc=input mass, radius=4.24e-6*M Rsun, zero spin, and luminosity=1e-10.';
+	    echo '         This option also enables the BHMERGER snapshot columns.';
+	    echo '  --bhmerger Add and initialize the BHMERGER spin-vector columns to zero.';
+	    echo '         Requires "-s bse" and a PeTar build configured with --enable-bhmerger.';
 	    echo '  -m [F] Set the mass scaling factor from the input data unit to [Msun]: mass[input unit]*m_scale=mass[Msun] (default: 1.0)';
 	    echo '      Note that Msun is used as the mass unit in BSE based stellar evolution.';
 	    echo '  -r [F] Set the radius scaling factor from the input data unit to [pc] (default: 1.0)';
@@ -46,6 +49,7 @@ do
 	-i) shift; igline=$1; shift;;
 	-s) shift; seflag=$1; shift;;
 	--blackhole) blackhole=1; shift;;
+	--bhmerger) bhmerger=1; shift;;
 	-m) shift; mscale=$1; convert=1; shift;;
 	-r) shift; rscale=$1; convert=1; shift;;
 	-v) shift; vscale=$1; convert=1; shift;;
@@ -65,6 +69,7 @@ fi
 [ -z $igline ] && igline=0
 [ -z $seflag ] && seflag='no'
 [ -z $blackhole ] && blackhole=0
+[ -z $bhmerger ] && bhmerger=0
 [ -z $extflag ] && extflag='no'
 [ -z $rscale ] && rscale=1.0
 [ -z $mscale ] && mscale=1.0
@@ -82,6 +87,11 @@ if [[ $blackhole == 1 && "$seflag" != *"bse"* ]]; then
     echo 'Error: --blackhole requires -s bse' >&2
     exit 1
 fi
+if [[ $bhmerger == 1 && "$seflag" != *"bse"* ]]; then
+    echo 'Error: --bhmerger requires -s bse' >&2
+    exit 1
+fi
+[[ $blackhole == 1 ]] && bhmerger=1
 
 n=`wc -l $fname|awk '{print $1}'`
 n=`expr $n - $igline`
@@ -149,6 +159,13 @@ if [[ $seflag != 'no' ]]; then
 	echo 'Stellar radius (0): " $radius
 	awk '{OFMT="%.15g"; print '"$base_col$se_col$soft_col"'}' $fout.scale__ >>$fout
     elif [[ "$seflag" == *"bse"* ]]; then
+	# BHMERGER stores a dimensionless 3D Kerr-spin vector separately from
+	# BSE's scalar stellar rotation.  ParticleBase reads these after the BSE
+	# columns, so keep the generated column order in sync with that reader.
+	bhmerger_col=''
+	if [[ $bhmerger == 1 ]]; then
+	    bhmerger_col='0.0, 0.0, 0.0,'
+	fi
 	#       type, m0,  m,     rad, mc,  rc,  spin, epoch, time, lum
 	if [[ $blackhole == 1 ]]; then
 	    # Match BSE hrdiag.f for kw=14: the whole mass is core mass and
@@ -160,8 +177,9 @@ if [[ $seflag != 'no' ]]; then
 
 	echo 'Interrupt mode: '$seflag
 	[[ $blackhole == 1 ]] && echo 'Initialize all objects as black holes: kw=14, radius=4.24e-6*M Rsun'
+	[[ $bhmerger == 1 ]] && echo 'Initialize BHMERGER spin vectors: 0 0 0'
 	echo 'mass scale from PeTar unit (PT) to Msun (m[Msun] = m[PT]*mscale): ' $mscale
-	awk -v ms=$mscale  '{OFMT="%.15g"; print '"$base_col$se_col$bse_col$soft_col"'}' $fout.scale__ >>$fout
+	awk -v ms=$mscale  '{OFMT="%.15g"; print '"$base_col$se_col$bse_col$bhmerger_col$soft_col"'}' $fout.scale__ >>$fout
     else
 	echo 'Error: unknown option for stellar evolution: '$seflag
     fi
