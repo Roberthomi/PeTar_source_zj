@@ -168,6 +168,8 @@ class HardData(DictNpArrayMix):
                 Number of members of one group
             N_sd: int (0)
                 Number of slowdown pairs
+            bhmerger: bool (False)
+                Whether each particle contains the BHMERGER spin vector
         """
         kwargs['member_type']=Particle
         kwargs['particle_type']='hermite'

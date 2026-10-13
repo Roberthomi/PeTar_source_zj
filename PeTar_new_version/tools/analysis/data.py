@@ -369,6 +369,10 @@ class Particle(SimpleParticle):
              bse:       std + bstat + se + bse + ends
              none (default): std + bstat + ends
 
+        bhmerger: when kwargs['bhmerger'] is True, append the three-component
+                  black-hole spin vector after the stellar-evolution fields,
+                  matching a BHMERGER-enabled PeTar build
+
     """
 
     def __init__ (self, _dat=None, _offset=int(0), _append=False, **kwargs):
@@ -385,6 +389,8 @@ class Particle(SimpleParticle):
             external_mode: string (none)
                PeTar external mode (set in configure): galpy, none 
                This option indicates whether the column of externa potential exist
+            bhmerger: bool (False)
+               Whether BHMERGER spin.x/spin.y/spin.z columns exist
         """
 
         keys_bstat = [['binary_state',np.int64]]
@@ -402,12 +408,17 @@ class Particle(SimpleParticle):
                 keys_end = keys_ptcl_add + keys_hermite_add
             elif (kwargs['particle_type']=='hard'):
                 keys_end = keys_ptcl_add
+        keys_spin = []
+        if kwargs.get('bhmerger', False):
+            keys_spin = [['spin', (np.float64, 3)]]
+
         keys=keys_bstat+keys_end
         if ('interrupt_mode' in kwargs.keys()):
             if (kwargs['interrupt_mode']=='base'):
-                keys = keys_bstat+keys_se+keys_end
+                keys = keys_bstat+keys_se+keys_spin+keys_end
             elif ('bse' in kwargs['interrupt_mode']):
-                keys = keys_bstat+keys_se+[['star',SSEStarParameter]]+keys_end
+                keys = (keys_bstat+keys_se+[['star',SSEStarParameter]]
+                        +keys_spin+keys_end)
             
         SimpleParticle.__init__(self, _dat, _offset, _append, **kwargs)
         DictNpArrayMix.__init__(self, keys, _dat, _offset+self.ncols, True, **kwargs)
