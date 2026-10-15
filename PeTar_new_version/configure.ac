@@ -132,11 +132,30 @@ AC_ARG_WITH([arch],
 
 AC_ARG_WITH([simd],
             [AS_HELP_STRING([--with-simd],
-                [compile with x86 architecture support (avx, avx2, avx512). Default: auto])],
+                [select SIMD backend (avx, avx2, avx512, neon). Default: auto])],
             [],
             [with_simd=auto])
 
-AS_IF([test x"$with_arch" == xx86],
+# The neon backend reuses the x86 kernel API through SIMDe native aliases.
+AS_IF([test x"$with_simd" = xneon],
+      [AS_IF([test x"$with_arch" != xx86],
+             [AC_MSG_ERROR([--with-simd=neon uses the compatibility kernel; omit --with-arch])])
+       AC_LANG_PUSH([C++])
+       AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#if !defined(__aarch64__) || !defined(__ARM_NEON)
+#error AArch64 with NEON is required
+#endif
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/avx2.h>
+#include <simde/x86/fma.h>
+       ]], [[__m256 x = _mm256_set1_ps(1.0f); (void)x;]])],
+         [SIMDFLAGS=" -DPETAR_SIMD_NEON"
+          SIMD_TYPE=neon
+          use_simd=yes
+          PROG_NAME=$PROG_NAME".neon"],
+         [AC_MSG_ERROR([NEON requires an AArch64 compiler and SIMDe headers (set CXXFLAGS=-I/path/to/simde)])])
+       AC_LANG_POP([C++])],
+[AS_IF([test x"$with_arch" == xx86],
       [use_simd=no
        AS_IF([test x"$with_simd" != xauto],
              [AS_CASE($with_simd,
@@ -166,7 +185,7 @@ AS_IF([test x"$with_arch" == xx86],
                                                 [])])])
        AS_IF([test x"$use_simd" != xno],
              [PROG_NAME=$PROG_NAME"."$SIMD_TYPE])],
-      [use_simd=no])
+      [use_simd=no])])
       
 AS_IF([test x"$with_arch" == xfugaku],
       [AX_CHECK_COMPILE_FLAG(['-Kfast -Nclang'],

@@ -53,4 +53,8 @@ gpupot.gpu.o: gpupot.gpu.cu cuda_pointer.h
 	nvcc -c $(CUFLAGS) -Xcompiler "-fPIC -O3 -Wall" -I$(SDK_PATH)/common/inc -I. gpupot.gpu.cu 
 
 clean:
-	rm -f *.o mcluster_sse mcluster mcluster_gpu
+	rm -f *.o mcluster_sse mcluster mcluster_gpu mcluster_fast
+
+# Opt-in cache-blocked direct Plummer potential; default build is unchanged.
+mcluster_fast: main.c main.h fast_potential.h
+	$(CC) $(DMFLAGS) -O3 -march=native -fno-math-errno -DFAST_POTENTIAL -o $@ main.c -lm

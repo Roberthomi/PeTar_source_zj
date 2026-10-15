@@ -235,7 +235,7 @@ PETAR_INCLUDE += -I./bhmerger
 CXXFLAGS += -D BHMERGER_INTERFACE_LINKED
 endif
 
-SRC = main.cc ${shell ls ./src/*.hpp} 
+SRC = main.cc ${shell ls ./src/*.hpp} ./src/simd_compat.h
 
 build:
 	[ -d build ] || mkdir build

@@ -194,6 +194,73 @@ required dependency source immediately.
 
 ## Building PeTar
 
+### lingsheng SIMD dependency (Arm/NEON)
+
+The Arm SIMD compatibility backend requires an AArch64 CPU/compiler with
+NEON and the external, header-only **SIMDe** library. The existing backend
+notes use SIMDe v0.8.2; its headers are not bundled in this repository.
+Point the include path at the directory containing `simde/`:
+
+```sh
+cd PeTar_new_version
+./configure --with-simd=neon \
+  CXXFLAGS="-O3 -march=armv8-a+simd -I/path/to/simde" \
+  --with-fdps-prefix=../FDPS --with-sdar-prefix=../SDAR
+make
+```
+
+Retain the MPI/BSE and installation options appropriate to the application.
+Omit `--with-arch` for this backend (do not use `--with-arch=none`). It maps
+the existing AVX-width kernel through SIMDe to 128-bit NEON operations;
+SVE is not required. Native x86 AVX builds do not require SIMDe. This is
+separate from McLuster's compiler/OpenMP SIMD optimization below.
+See [Arm SIMD setup and numerical checks](PeTar_new_version/ARM_SIMD.md).
+The saved backend validation covers portable and native x86 execution;
+performance and numerical behavior still need validation on the target Arm CPU.
+
+### McLuster pair-sum correction
+
+The two original CPU potential loops (Plummer and the branch for profiles
+`1`, `3`, and `-1`) and the accelerated Plummer loop now use `j < i`.
+The old `j < i-1` range omitted `(0,1), (1,2), ..., (N-2,N-1)`: N-1
+interactions. Each distinct pair must contribute once to
+`U = -G sum(i>j) m_i m_j / r_ij`. The omission made the binding energy
+too small in magnitude and affected subsequent model normalization.
+
+This fix applies to the default CPU build as well as `mcluster_fast`;
+the GPU implementation is unchanged. Existing initial-condition files are
+not modified. Regenerate them when comparing corrected models; earlier
+benchmark models/results predate this fix. A two-particle analytic check
+guards against the old zero-potential result.
+
+### McLuster acceleration algorithm
+
+```sh
+make -C mcluster mcluster_fast
+OMP_NUM_THREADS=32 ./mcluster/mcluster_fast [normal McLuster options]
+```
+
+The optional CPU Plummer implementation copies masses and positions into
+contiguous arrays, processes 256-row blocks for cache reuse, and uses OpenMP
+parallelism and SIMD reductions. It still computes direct O(N²) gravity;
+there is no tree or analytical-potential approximation. Extra coordinate
+storage is 32 bytes per particle (96 MB for three million particles).
+Random sampling and model parameters are unchanged, but floating-point
+reduction order differs, so results need not be bitwise identical.
+
+The build uses `-O3 -march=native -fno-math-errno` with OpenMP, without
+`-ffast-math`. Rebuild on a different CPU rather than copying this binary.
+Progress reports completed row blocks, not a linear estimate of elapsed
+time. Before the correctness fix, a local 500,000-particle kernel test
+measured about 1.48x speedup; this is not a universal performance guarantee.
+See [algorithm details and numerical test command](mcluster/FAST_POTENTIAL.md).
+
+McLuster's existing output routines have 50-byte filename buffers. Until
+those routines are hardened, run inside the destination directory and pass
+a short `-o` basename rather than a long absolute path.
+
+### Main simulation build
+
 From `PeTar_new_version`, configure and build using the options appropriate for
 the target machine. The adjacent dependency directories are found by the
 project's default configuration paths.

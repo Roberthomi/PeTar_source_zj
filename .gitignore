@@ -72,3 +72,4 @@ FDPS/sample/c++/planetary_ring/ring_mono*.s
 # Locally built McLuster programs
 mcluster/mcluster
 mcluster/mcluster_sse
+mcluster/mcluster_fast

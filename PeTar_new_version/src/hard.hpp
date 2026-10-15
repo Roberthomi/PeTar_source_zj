@@ -1,6 +1,6 @@
 #pragma once
 #ifdef USE_INTRINSIC_FOR_X86
-#include<immintrin.h>
+#include "simd_compat.h"
 #endif
 
 #include"cstdlib"

@@ -1,12 +1,12 @@
 // gcc -O2 -march=core-avx2
 #include <cassert>
-#include<immintrin.h>
+#include "simd_compat.h"
 
-#if defined (__AVX512F__) && defined (__AVX512DQ__)
+#if defined (__AVX512F__) && defined (__AVX512DQ__) && !defined(PETAR_SIMD_TRANSLATED)
 #define USE__AVX512
 #endif
 
-#ifndef __FMA__
+#if !defined(__FMA__) && !defined(PETAR_SIMD_TRANSLATED)
 #define _mm256_fmadd_ps(x,y,z)  _mm256_add_ps(z, _mm256_mul_ps(x,y))
 #define _mm256_fnmadd_ps(x,y,z) _mm256_sub_ps(z, _mm256_mul_ps(x,y))
 #define _mm512_fmadd_ps(x,y,z)  _mm512_add_ps(z, _mm512_mul_ps(x,y))
@@ -1246,10 +1246,13 @@ private:
 
 #if defined(CALC_EP_64bit) || defined(CALC_EP_MIX)
 
+#ifndef PETAR_SIMD_TRANSLATED
 #define _mm256_fmadd_pd(x,y,z)  _mm256_add_pd(z, _mm256_mul_pd(x,y))
 #define _mm256_fnmadd_pd(x,y,z) _mm256_sub_pd(z, _mm256_mul_pd(x,y))
 #define _mm512_fmadd_pd(x,y,z)  _mm512_add_pd(z, _mm512_mul_pd(x,y))
 #define _mm512_fnmadd_pd(x,y,z) _mm512_sub_pd(z, _mm512_mul_pd(x,y))
+
+#endif
 
 class PhantomGrapeQuad64Bit{
 public:

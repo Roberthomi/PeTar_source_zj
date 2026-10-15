@@ -61,6 +61,10 @@
 
 
 
+#ifdef FAST_POTENTIAL
+#include "fast_potential.h"
+#endif
+
 int main (int argv, char **argc) {
 
 #ifdef DARKMATTER
@@ -906,6 +910,10 @@ int main (int argv, char **argc) {
 		}
 #endif
         //		printf("PE_GPU %lg ke %lg\n",pe,ke);
+#elif defined(FAST_POTENTIAL)
+        pe = mcluster_fast_potential(N, star);
+        for (i=0; i<N; ++i)
+            ke += star[i][0]*(pow(star[i][4],2)+pow(star[i][5],2)+pow(star[i][6],2));
 #else
 #ifndef NOOMP	
 #pragma omp parallel shared(N, star)  private(i, j, r2)
@@ -914,7 +922,7 @@ int main (int argv, char **argc) {
 #endif
 		for (i=0;i<N;i++) {
 			if (i) {
-				for (j=0;j<i-1;j++) {
+				for (j=0;j<i;j++) {
 					r2 = (star[i][1]-star[j][1])*(star[i][1]-star[j][1]) + (star[i][2]-star[j][2])*(star[i][2]-star[j][2]) +(star[i][3]-star[j][3])*(star[i][3]-star[j][3]) ;
 					pe -=  star[i][0]*star[j][0]/sqrt(r2);
 				}
@@ -980,7 +988,7 @@ int main (int argv, char **argc) {
 #pragma omp for reduction(+: pe, ke) schedule(dynamic)
 #endif
 		for (i=0;i<N;i++) {
-			for (j=0;j<i-1;j++) {
+			for (j=0;j<i;j++) {
 				r2 = (star[i][1]-star[j][1])*(star[i][1]-star[j][1]) + (star[i][2]-star[j][2])*(star[i][2]-star[j][2]) +(star[i][3]-star[j][3])*(star[i][3]-star[j][3]) ;
 				pe -=  star[i][0]*star[j][0]/sqrt(r2);
 			}

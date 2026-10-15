@@ -320,7 +320,9 @@ int main(int argc, char **argv){
         if (force[i].n_ngb<20) nbcount[force[i].n_ngb]++;
     }
 
-#ifdef USE__AVX512
+#if defined(PETAR_SIMD_NEON)
+    std::cout<<"Use Armv8 NEON (SIMDe)";
+#elif defined(USE__AVX512)
     std::cout<<"Use AVX512";
 #elif defined(__AVX2__)
     std::cout<<"Use AVX2";

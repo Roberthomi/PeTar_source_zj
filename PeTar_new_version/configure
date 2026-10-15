@@ -1437,8 +1437,8 @@ Optional Packages:
   --with-cpp-std          version of c++ standard (11, 17). Default: 17
   --with-arch             compile with architecture type (x86, fugaku).
                           Default: x86
-  --with-simd             compile with x86 architecture support (avx, avx2,
-                          avx512). Default: auto
+  --with-simd             select SIMD backend (avx, avx2, avx512, neon).
+                          Default: auto
   --with-cuda-prefix      Prefix of your CUDA installation
   --with-gperf-prefix     Prefix of your gperftools installation
   --with-fdps-prefix      Prefix of your FDPS installation. Default: ../FDPS
@@ -4437,7 +4437,55 @@ else $as_nop
 fi
 
 
-if test x"$with_arch" == xx86
+# The neon backend reuses the x86 kernel API through SIMDe native aliases.
+if test x"$with_simd" = xneon
+then :
+  if test x"$with_arch" != xx86
+then :
+  as_fn_error $? "--with-simd=neon uses the compatibility kernel; omit --with-arch" "$LINENO" 5
+fi
+       ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+       cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#if !defined(__aarch64__) || !defined(__ARM_NEON)
+#error AArch64 with NEON is required
+#endif
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/avx2.h>
+#include <simde/x86/fma.h>
+
+int
+main (void)
+{
+__m256 x = _mm256_set1_ps(1.0f); (void)x;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_compile "$LINENO"
+then :
+  SIMDFLAGS=" -DPETAR_SIMD_NEON"
+          SIMD_TYPE=neon
+          use_simd=yes
+          PROG_NAME=$PROG_NAME".neon"
+else $as_nop
+  as_fn_error $? "NEON requires an AArch64 compiler and SIMDe headers (set CXXFLAGS=-I/path/to/simde)" "$LINENO" 5
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+       ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+else $as_nop
+  if test x"$with_arch" == xx86
 then :
   use_simd=no
        if test x"$with_simd" != xauto
@@ -4683,6 +4731,7 @@ then :
 fi
 else $as_nop
   use_simd=no
+fi
 fi
 
 if test x"$with_arch" == xfugaku
