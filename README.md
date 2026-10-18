@@ -21,6 +21,7 @@ machine-local CUDA toolkit, and cached third-party binary packages are also
 excluded. CUDA, MPI, Python/NumPy, Galpy, and system compiler runtimes must be
 provided by the target machine.
 
+
 ## Added features in this snapshot
 
 ### Live collisionless dark matter
@@ -111,6 +112,7 @@ concurrency bugs that could propagate invalid particle data or crash a run:
   false-positive merger predictions based only on the osculating orbit or
   pericentre. The same physical-contact requirement is used for bound and
   unbound encounters, and stale delayed-collision flags are cleared.
+- 10.18 修改了escaper.hpp中的能量判据，目前会给动能乘上1/2，
 
 ### Merger radius selection
 
