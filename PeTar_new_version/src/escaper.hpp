@@ -17,7 +17,9 @@ public:
 
         if (check_energy_flag) { 
             // check energy
-            PS::F64 kin = _p.vel*_p.vel;
+            // Specific kinetic energy is v^2 / 2.  Keep this consistent
+            // with the energy correction applied when an escaper is removed.
+            PS::F64 kin = 0.5*(_p.vel*_p.vel);
             PS::F64 tot = _p.pot_tot + kin;
             if (tot<0) is_escape=false;
         }
