@@ -9,6 +9,7 @@
 #include "Hermite/neighbor.h"
 #include "Hermite/profile.h"
 #include <map>
+#include <vector>
 
 namespace H4{
 
@@ -1187,6 +1188,11 @@ namespace H4{
                 // initial index_dt_sorted_single_ first to allow initialIntegration work
                 index_dt_sorted_single_[i] = i;
                 table_single_mask_[i] = false;
+                // Initialize before addGroups removes members from the single list.
+                // Resolved groups also use their members' neighbor records.
+                neighbors[i].clearNoFreeMem();
+                const Float r_neighbor = particles[i].getRNeighbor();
+                neighbors[i].r_neighbor_crit_sq = r_neighbor*r_neighbor;
             }
             // set initial time
             time_ = _time_sys;
@@ -1576,14 +1582,15 @@ namespace H4{
             const int n_group_tot = index_dt_sorted_group_.getSize();
             if (n_group_tot==0) return;
 
-            bool merge_mask[n_group_tot];
-            for (int k=0; k<n_group_tot; k++) merge_mask[k] = false;
+            // k is a slot in groups, not a position in the active-group list.
+            // Removed groups can leave holes in the active slot indices.
+            std::vector<unsigned char> merge_mask(groups.getSize(), 0);
 
             // check merger case
             const int n_merger = index_group_merger_.getSize();
             for (int i=0; i<n_merger; i++) {
                 const int k = index_group_merger_[i];
-                ASSERT(k<groups.getSize());
+                ASSERT(k>=0 && k<groups.getSize());
                 ASSERT(table_group_mask_[k]==false);
                 auto& groupk = groups[k];
 #ifdef ADJUST_GROUP_DEBUG
@@ -1609,6 +1616,7 @@ namespace H4{
             const Float kappa_org_crit = 1e-2;
             for (int i=0; i<n_group_tot; i++) {
                 const int k = index_dt_sorted_group_[i];
+                ASSERT(k>=0 && k<groups.getSize());
                 ASSERT(table_group_mask_[k]==false);
                 if (merge_mask[k]) continue;
                 auto& groupk = groups[k];

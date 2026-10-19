@@ -91,6 +91,61 @@ under `PeTar_new_version/test/`.
 
 ## Local stability fixes
 
+### SDAR nearest-neighbor initialization
+
+`SDAR/src/Hermite/neighbor.h` now initializes and resets `r_min_mass` in
+the constructor and all neighbor reset/clear paths. Previously, the first
+mass-weighted nearest-neighbor comparison could read this value before it
+was assigned. Both single-particle and group searches now accept the first
+positive-mass candidate explicitly, then retain the existing distance-squared
+over mass comparison. Zero-mass candidates are excluded from nearest-neighbor
+selection; neighbor-list membership is unchanged. This fixes an uninitialized
+read, but has not been established as the cause of the `data.46` reproducibility
+issue. Rebuild PeTar to include this header change.
+
+The focused regression covers construction, every reset/clear path, both
+candidate types, zero-mass candidates, and mass-weighted selection:
+
+```sh
+g++ -std=c++17 -O2 -Wall -Wextra -I SDAR/src SDAR/tests/neighbor_initialization.cpp -o /tmp/sdar-neighbor-test
+/tmp/sdar-neighbor-test
+```
+
+### SDAR group-break mask bounds
+
+`HermiteIntegrator::checkBreak()` now allocates a zero-initialized merger mask
+over `groups.getSize()` slots instead of the active-group count. Active group
+indices can have holes after groups are removed; for example, active slots
+`[0, 2]` previously indexed past a two-element mask. The change fixes both the
+merger-mask write and the break-check read, adds slot-bound assertions, and
+replaces the variable-length stack array with `std::vector<unsigned char>`.
+The group-break criteria are unchanged. Rebuild PeTar to apply the fix;
+its effect on `data.46` reproducibility has not yet been validated.
+
+The regression directly calls `checkBreak()` with active slots `[0, 2]`,
+both with and without a merger at slot 2, and checks the resulting break list:
+
+```sh
+g++ -std=c++17 -O1 -g -fsanitize=address,undefined -I SDAR/src SDAR/tests/group_break_mask.cpp -o /tmp/sdar-group-break-test
+/tmp/sdar-group-break-test
+```
+
+### SDAR initial group-member neighbor state
+
+`initialSystemSingle()` now clears the neighbor record of every particle and
+sets `r_neighbor_crit_sq` from its current `getRNeighbor()` before groups are
+formed. Previously, particles placed into initial groups were removed from the
+single-particle initialization list, leaving their member-level search radii at
+the default value even though resolved-group force evaluation uses these records.
+The later local initialization in `initialIntegration()` is unchanged, preserving
+unrelated particles' neighbor lists and step-update flags during group changes.
+This corrects neighbor initialization, not the force law; its effect on full-run
+trajectories and `data.46` reproducibility has not yet been measured. Rebuild
+PeTar to apply it. The `group_break_mask.cpp` regression above also checks this
+initialization path and neighbor selection for an initial group member.
+
+### PeTar state consistency
+
 The current PeTar source includes fixes for three state-consistency and
 concurrency bugs that could propagate invalid particle data or crash a run:
 

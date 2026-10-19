@@ -43,7 +43,7 @@ namespace H4 {
         int r_min_index;   // nearest neighbor index for each ptcl
         int mass_min_index;    // mimimum mass in neighbors
         Float r_min_sq;    // nearest neighbor distance square
-        Float r_min_mass;   // nearest neighbor index for each ptcl
+        Float r_min_mass;   // mass of the mass-weighted nearest neighbor
         Float mass_min;    // mimimum mass in neighbors
         Float r_neighbor_crit_sq; // neighbor radius criterion
         bool need_resolve_flag; // indicate whether the members need to be resolved for outside
@@ -53,7 +53,7 @@ namespace H4 {
         COMM::List<NBAdr<Tparticle>> neighbor_address; // neighbor perturber address
 
         //! constructor
-        Neighbor(): r_min_index(-1), mass_min_index(-1), r_min_sq(NUMERIC_FLOAT_MAX), mass_min(NUMERIC_FLOAT_MAX), r_neighbor_crit_sq(-1.0), need_resolve_flag(false), initial_step_flag(false), n_neighbor_group(0), n_neighbor_single(0), neighbor_address() {}
+        Neighbor(): r_min_index(-1), mass_min_index(-1), r_min_sq(NUMERIC_FLOAT_MAX), r_min_mass(0.0), mass_min(NUMERIC_FLOAT_MAX), r_neighbor_crit_sq(-1.0), need_resolve_flag(false), initial_step_flag(false), n_neighbor_group(0), n_neighbor_single(0), neighbor_address() {}
 
         //! check whether parameters values are correct
         /*! \return true: all correct
@@ -114,6 +114,7 @@ namespace H4 {
             r_min_index = -1;
             mass_min_index = -1;
             r_min_sq = NUMERIC_FLOAT_MAX;
+            r_min_mass = 0.0;
             mass_min = NUMERIC_FLOAT_MAX;
             need_resolve_flag = false;
             initial_step_flag = false;
@@ -124,6 +125,7 @@ namespace H4 {
             r_min_index = -1;
             mass_min_index = -1;
             r_min_sq = NUMERIC_FLOAT_MAX;
+            r_min_mass = 0.0;
             mass_min = NUMERIC_FLOAT_MAX;
             n_neighbor_group = 0;
             n_neighbor_single = 0;
@@ -156,7 +158,8 @@ namespace H4 {
             }
             // mass weighted nearest neigbor
             Float mass = _particle.mass;
-            if (_r2*r_min_mass < r_min_sq*mass) {
+            // Accept the first positive-mass candidate without using prior state.
+            if (mass>0.0 && (r_min_index<0 || _r2*r_min_mass < r_min_sq*mass)) {
                 r_min_sq = _r2;
                 r_min_index = _index;
                 r_min_mass = mass;
@@ -180,7 +183,7 @@ namespace H4 {
             }
             // mass weighted nearest neigbor
             Float mass_cm = _group.particles.cm.mass;
-            if (_r2*r_min_mass < r_min_sq*mass_cm) {
+            if (mass_cm>0.0 && (r_min_index<0 || _r2*r_min_mass < r_min_sq*mass_cm)) {
                 r_min_sq = _r2;
                 r_min_index = _index;
                 r_min_mass = mass_cm;
