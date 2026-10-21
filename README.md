@@ -144,6 +144,26 @@ trajectories and `data.46` reproducibility has not yet been measured. Rebuild
 PeTar to apply it. The `group_break_mask.cpp` regression above also checks this
 initialization path and neighbor selection for an initial group member.
 
+### Empty-list temporary arrays
+
+Short-restart UBSan checks exposed zero-length variable-length arrays in
+SDAR's `integrateToTimeList()` and `integrateGroupsOneStep()`, and PeTar's AR
+perturber calculation. Empty integration requests now return immediately;
+the selection, interruption-index, and single/group perturber-pointer arrays
+use `std::vector`, which supports empty lists. This includes the case where
+perturbers exist but all are singles or all are groups. Existing iteration
+counts, force formulas, and integration criteria are unchanged. The focused
+regression also covers an empty integration request and a request with no
+group slots. Rebuild PeTar to apply these header changes.
+
+Validation: the focused ASan/UBSan regression passed. A freshly compiled
+`-O0` ASan/UBSan OpenMP/BSE build (BHMERGER disabled to match the 34-column
+snapshot) completed a one-thread, 16-step restart from `data.46`, from
+`t=4.598876953125` to `4.599365234375`, retaining 982 particles, with
+`UBSAN_OPTIONS=halt_on_error=1` and leak detection disabled. No ASan/UBSan
+diagnostics were reported in that run. This is not a multithreaded or long-term
+accuracy validation; the existing BSE library was not sanitizer-instrumented.
+
 ### PeTar state consistency
 
 The current PeTar source includes fixes for three state-consistency and

@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 #include <limits>
+#include <vector>
 #include "Common/Float.h"
 #include "Common/binary_tree.h"
 #include "changeover.hpp"
@@ -459,8 +460,8 @@ public:
             auto* pert_adr = _perturber.neighbor_address.getDataAddress();
 
             Float xp[n_pert][3], xcm[3], m[n_pert];
-            ChangeOver* changeover[n_pert_single];
-            H4::NBAdr<PtclHard>::Group* ptclgroup[n_pert_group];
+            std::vector<ChangeOver*> changeover(n_pert_single);
+            std::vector<H4::NBAdr<PtclHard>::Group*> ptclgroup(n_pert_group);
 
             int n_single_count=0;
             int n_group_count=0;

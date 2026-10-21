@@ -103,6 +103,14 @@ static void checkInitialMemberNeighbors() {
         nb.initial_step_flag = true;
     }
     h.initialSystemSingle(0.0);
+    // Empty requests and a nonempty request with no group slots are valid.
+    const Float original_x = h.particles[0].pos[0];
+    h.integrateToTimeList(0.0, nullptr, 0);
+    h.particles[0].time = 0.0;
+    const int single[] = {0};
+    h.integrateToTimeList(0.0, single, 1);
+    assert(h.particles[0].pos[0] == original_x);
+    assert(h.groups.getSize() == 0);
     int members[] = {0, 1}, offsets[] = {0, 2};
     h.addGroups(members, offsets, 1);
     assert(h.n_init_single_ == 1);

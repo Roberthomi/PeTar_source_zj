@@ -2342,7 +2342,7 @@ namespace H4{
             // integrate groups loop 
             const int n_group_tot = index_dt_sorted_group_.getSize();
             const int i_start = interrupt_group_dt_sorted_group_index_>=0 ? interrupt_group_dt_sorted_group_index_ : 0;
-            int interrupt_index_dt_group_list[n_group_tot];
+            std::vector<int> interrupt_index_dt_group_list(n_group_tot);
             int n_interrupt_change_dt=0;
 
             for (int i=i_start; i<n_group_tot; i++) {
@@ -2623,10 +2623,13 @@ namespace H4{
             ASSERT(!particles.isModified());
             ASSERT(initial_system_flag_);
 
+            ASSERT(_n_particle>=0);
+            if (_n_particle==0) return;
+
             // adjust dt
-            int index_single_select[_n_particle];
+            std::vector<int> index_single_select(_n_particle);
             int n_single_select =0;
-            int index_group_select[groups.getSize()];
+            std::vector<int> index_group_select(groups.getSize());
             int n_group_select =0;
 
             auto* ptcl = particles.getDataAddress();
@@ -2652,11 +2655,11 @@ namespace H4{
 
             if (n_single_select>0 || n_group_select>0) {
 
-                calcAccJerkNBList(index_single_select, n_single_select, index_group_select, n_group_select);
+                calcAccJerkNBList(index_single_select.data(), n_single_select, index_group_select.data(), n_group_select);
 
-                correctAndCalcDt4thList(index_single_select, n_single_select, index_group_select, n_group_select, dt_limit_);
+                correctAndCalcDt4thList(index_single_select.data(), n_single_select, index_group_select.data(), n_group_select, dt_limit_);
 
-                updateTimeNextList(index_single_select, n_single_select, index_group_select, n_group_select);
+                updateTimeNextList(index_single_select.data(), n_single_select, index_group_select.data(), n_group_select);
             }
         }
 
