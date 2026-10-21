@@ -2451,6 +2451,22 @@ public:
                       });
             cluster_perm = cluster_order.data();
         }
+        // test7d: per-cluster accumulators.  The parallel loop below writes only
+        // its own cluster slot; the global sums are done afterwards in cluster
+        // index order, so the result no longer depends on thread scheduling.
+#ifdef PROFILE
+        std::vector<PS::S64> arc_substep_cluster(n_cluster, 0);
+        std::vector<PS::S64> arc_tsyn_cluster(n_cluster, 0);
+        std::vector<PS::S64> h4_step_cluster(n_cluster, 0);
+        std::vector<PS::S64> arc_n_groups_cluster(n_cluster, 0);
+        std::vector<PS::S64> arc_n_groups_iso_cluster(n_cluster, 0);
+#endif
+#ifdef HARD_COUNT_NO_NEIGHBOR
+        std::vector<PS::S32> neighbor_zero_cluster(n_cluster, 0);
+#endif
+#ifdef HARD_CHECK_ENERGY
+        std::vector<HardEnergy> energy_cluster(n_cluster);
+#endif
 #pragma omp parallel for schedule(dynamic,1) num_threads(InnerPar::outerFor(num_thread))
         for(PS::S32 kk=0; kk<n_cluster; kk++){
             const PS::S32 i = (cluster_perm!=NULL) ? cluster_perm[kk] : kk;
@@ -2473,7 +2489,7 @@ public:
                 PS::S32 ptcl_arti_first_index = adr_first_ptcl_arti_in_cluster_[n_group_in_cluster_offset_[i]];
                 if (ptcl_arti_first_index>=0) ptcl_artificial_ptr = &(_ptcl_soft[ptcl_arti_first_index]);
 #ifdef PROFILE
-                else ARC_n_groups_iso += 1;
+                else arc_n_groups_iso_cluster[i] = 1;
 #endif
                 n_member_in_group_ptr = &(n_member_in_group_[n_group_in_cluster_offset_[i]]);
             }
@@ -2481,7 +2497,7 @@ public:
             num_cluster[ith] += n_ptcl;
 #endif
 #ifdef PROFILE
-            ARC_n_groups  += n_group;
+            arc_n_groups_cluster[i] = n_group;
 #endif
 
 #ifdef HARD_DUMP
@@ -2523,15 +2539,15 @@ public:
                 hard_int_thread[ith]->driftClusterCMRecordGroupCMDataAndWriteBack(dt);
 
 #ifdef PROFILE
-                ARC_substep_sum    += hard_int_thread[ith]->ARC_substep_sum;
-                ARC_tsyn_step_sum  += hard_int_thread[ith]->ARC_tsyn_step_sum;
-                H4_step_sum        += hard_int_thread[ith]->H4_step_sum;
+                arc_substep_cluster[i] = hard_int_thread[ith]->ARC_substep_sum;
+                arc_tsyn_cluster[i]   = hard_int_thread[ith]->ARC_tsyn_step_sum;
+                h4_step_cluster[i]     = hard_int_thread[ith]->H4_step_sum;
 #endif
 #ifdef HARD_COUNT_NO_NEIGHBOR
-                n_neighbor_zero    += hard_int_thread[ith]->n_neighbor_zero;
+                neighbor_zero_cluster[i] = hard_int_thread[ith]->n_neighbor_zero;
 #endif
 #ifdef HARD_CHECK_ENERGY
-                energy += hard_int_thread[ith]->energy;
+                energy_cluster[i] = hard_int_thread[ith]->energy;
 #endif
                 
                 hard_int_thread[ith]->clear();
@@ -2566,6 +2582,23 @@ public:
             InnerPar::leaveCluster();
         }
 
+        // test7d: deterministic serial reduction in cluster index order.
+#ifdef PROFILE
+        for (PS::S32 i=0; i<n_cluster; i++) {
+            ARC_substep_sum   += arc_substep_cluster[i];
+            ARC_tsyn_step_sum += arc_tsyn_cluster[i];
+            H4_step_sum       += h4_step_cluster[i];
+            ARC_n_groups      += arc_n_groups_cluster[i];
+            ARC_n_groups_iso  += arc_n_groups_iso_cluster[i];
+        }
+#endif
+#ifdef HARD_COUNT_NO_NEIGHBOR
+        for (PS::S32 i=0; i<n_cluster; i++) n_neighbor_zero += neighbor_zero_cluster[i];
+#endif
+#ifdef HARD_CHECK_ENERGY
+        for (PS::S32 i=0; i<n_cluster; i++) energy += energy_cluster[i];
+#endif
+
         // regist interrupted hard integrator
         assert(interrupt_list_.size()==0);
         for (auto iptr = hard_int_; iptr<hard_int_front_ptr; iptr++) 
@@ -2593,6 +2626,15 @@ public:
      */
     PS::S32 finishIntegrateInterruptClustersOMP() {
         PS::S32 n_interrupt = interrupt_list_.size();
+        // test7d: per-interrupt accumulators, serial reduction afterwards.
+#ifdef PROFILE
+        std::vector<PS::S64> arc_substep_int(n_interrupt, 0);
+        std::vector<PS::S64> arc_tsyn_int(n_interrupt, 0);
+        std::vector<PS::S64> h4_step_int(n_interrupt, 0);
+#endif
+#ifdef HARD_CHECK_ENERGY
+        std::vector<HardEnergy> energy_int(n_interrupt);
+#endif
 #pragma omp parallel for schedule(dynamic)
         for (PS::S32 i=0; i<n_interrupt; i++) {
             auto hard_int_ptr = interrupt_list_[i];
@@ -2602,17 +2644,28 @@ public:
                 hard_int_ptr->driftClusterCMRecordGroupCMDataAndWriteBack(interrupt_dt_);
 
 #ifdef PROFILE
-                ARC_substep_sum    += hard_int_ptr->ARC_substep_sum;
-                ARC_tsyn_step_sum  += hard_int_ptr->ARC_tsyn_step_sum;
-                H4_step_sum        += hard_int_ptr->H4_step_sum;
+                arc_substep_int[i] = hard_int_ptr->ARC_substep_sum;
+                arc_tsyn_int[i]    = hard_int_ptr->ARC_tsyn_step_sum;
+                h4_step_int[i]     = hard_int_ptr->H4_step_sum;
 #endif
 #ifdef HARD_CHECK_ENERGY
-                energy += hard_int_ptr->energy;
+                energy_int[i] = hard_int_ptr->energy;
 #endif
                 
                 hard_int_ptr->clear();
             }
         }
+
+#ifdef PROFILE
+        for (PS::S32 i=0; i<n_interrupt; i++) {
+            ARC_substep_sum   += arc_substep_int[i];
+            ARC_tsyn_step_sum += arc_tsyn_int[i];
+            H4_step_sum       += h4_step_int[i];
+        }
+#endif
+#ifdef HARD_CHECK_ENERGY
+        for (PS::S32 i=0; i<n_interrupt; i++) energy += energy_int[i];
+#endif
         
         // record new interrupt list
         PS::S32 i_front = 0;
