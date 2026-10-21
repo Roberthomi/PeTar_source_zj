@@ -9,6 +9,7 @@
 #include "Hermite/neighbor.h"
 #include "Hermite/profile.h"
 #include <map>
+#include <vector>
 
 namespace H4{
 
@@ -1576,8 +1577,11 @@ namespace H4{
             const int n_group_tot = index_dt_sorted_group_.getSize();
             if (n_group_tot==0) return;
 
-            bool merge_mask[n_group_tot];
-            for (int k=0; k<n_group_tot; k++) merge_mask[k] = false;
+            // test7 minimal fix: merge_mask must be indexed by the *global group
+            // slot* k (which can be >= n_group_tot when the group pool has holes),
+            // so size it by the pool high-water mark, not by the live count.
+            // std::vector also removes the non-standard VLA.
+            std::vector<char> merge_mask(groups.getSize(), 0);
 
             // check merger case
             const int n_merger = index_group_merger_.getSize();
@@ -2193,6 +2197,15 @@ namespace H4{
             int* index_single = index_dt_sorted_single_.getDataAddress();
 
             auto* ptcl = particles.getDataAddress();
+            // test7b: reset every Neighbor slot at cluster start.  The pool
+            // index is reused across clusters, so a non-init perturber could
+            // otherwise hand a stale r_neighbor_crit_sq / initial_step_flag
+            // to checkAndAddNeighbor* and change the neighbor list.
+            for (int j=0; j<particles.getSize(); j++) {
+                neighbors[j].clearNoFreeMem();
+                const Float rj = ptcl[j].getRNeighbor();
+                neighbors[j].r_neighbor_crit_sq = rj*rj;
+            }
             for(int i=0; i<n_init_single_; i++){
                 int k = index_single[i];
                 ptcl[k].acc0[0] = ptcl[k].acc0[1] = ptcl[k].acc0[2] = 0.0;
