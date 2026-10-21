@@ -183,6 +183,7 @@ public:
     PS::S32 n_neighbor_zero;
 #endif
 
+    PS::F64 phase_ar, phase_single, phase_all; ///> [PHASE] per-cluster timers
     bool use_sym_int;  ///> use AR integrator flag
     bool is_initialized; ///> indicator whether initialization is done
 #if defined(BSE_BASE) && defined(FROZEN_BINARY)
@@ -205,6 +206,7 @@ public:
 #ifdef HARD_COUNT_NO_NEIGHBOR
                       table_neighbor_exist(), n_neighbor_zero(0),
 #endif
+                      phase_ar(0), phase_single(0), phase_all(0),
                       use_sym_int(true), is_initialized(false)
 #if defined(BSE_BASE) && defined(FROZEN_BINARY)
                       , frozen_kepler(false)
@@ -675,6 +677,9 @@ public:
      */
     AR::InterruptBinary<PtclHard>& integrateToTime(const PS::F64 _time_end) {
         ASSERT(checkParams());
+        phase_ar = phase_single = phase_all = 0.0;
+        h4_int.force_time = 0.0;
+        const PS::F64 _phase_t0 = PS::GetWtime();
 
 #ifdef HARD_DUMP
         // dump flag
@@ -714,7 +719,9 @@ public:
             // integration loop
             while (h4_int.getTimeInt()<_time_end) {
                 // integrate groups
-                interrupt_binary = h4_int.integrateGroupsOneStep();
+                { const PS::F64 _t = PS::GetWtime();
+                  interrupt_binary = h4_int.integrateGroupsOneStep();
+                  phase_ar += PS::GetWtime() - _t; }
                 if (interrupt_binary.status!=AR::InterruptStatus::none) {
                     if (manager->ar_manager.interrupt_detection_option==1) {
                         // correct potential difference due to the changeover function
@@ -746,7 +753,9 @@ public:
 #endif
 
                 // integrate singles
-                h4_int.integrateSingleOneStepAct();
+                { const PS::F64 _t = PS::GetWtime();
+                  h4_int.integrateSingleOneStepAct();
+                  phase_single += PS::GetWtime() - _t; }
                 h4_int.adjustGroups(false);
 
                 const PS::S32 n_init_group = h4_int.getNInitGroup();
@@ -891,6 +900,7 @@ public:
             }
 
         }
+        phase_all = PS::GetWtime() - _phase_t0;
         return interrupt_binary;
     }
 
@@ -2421,9 +2431,32 @@ public:
         }
 #endif
 
-#pragma omp parallel for schedule(dynamic)
-        for(PS::S32 i=0; i<n_cluster; i++){
+        // [PAR] benchmark knob: PETAR_OUTER_THREADS limits the team used by the
+        // "one task per hard cluster" loop, independently of OMP_NUM_THREADS
+        // (which keeps driving the FDPS tree force).  Defaults to the full team.
+        // [P2/LPT 2026-10-18] 大 cluster 优先分发：
+        // 把 cluster 按成员数降序排列后交给 schedule(dynamic)，最大的 cluster 在整步一开始
+        // 就进场，其余线程处理完小 cluster 后能持续偷它的 item task，压掉"最后只剩一个大
+        // cluster"的尾部。dispatch 顺序不改变任何 cluster 的算术 => 数值中性。
+        std::vector<PS::S32> cluster_order;
+        const PS::S32* cluster_perm = NULL;
+        if (InnerPar::cluster_lpt && n_cluster>8) {
+            cluster_order.resize(n_cluster);
+            for (PS::S32 ii=0; ii<n_cluster; ii++) cluster_order[ii] = ii;
+            std::sort(cluster_order.begin(), cluster_order.end(),
+                      [&](const PS::S32 a, const PS::S32 b) {
+                          const PS::S32 na = n_ptcl_in_cluster_[a];
+                          const PS::S32 nb = n_ptcl_in_cluster_[b];
+                          return (na!=nb) ? (na>nb) : (a<b);
+                      });
+            cluster_perm = cluster_order.data();
+        }
+#pragma omp parallel for schedule(dynamic,1) num_threads(InnerPar::outerFor(num_thread))
+        for(PS::S32 kk=0; kk<n_cluster; kk++){
+            const PS::S32 i = (cluster_perm!=NULL) ? cluster_perm[kk] : kk;
             const PS::S32 ith = PS::Comm::getThreadNum();
+            // [PAR v2] 只在本 cluster 任务的作用域内允许 level-2 并行
+            InnerPar::enterCluster();
 #ifdef OMP_PROFILE
             time_thread[ith] -= PS::GetWtime();
 #endif
@@ -2464,6 +2497,21 @@ public:
             hard_int_thread[ith]->initial(ptcl_hard_.getPointer(adr_head), n_ptcl, ptcl_artificial_ptr, n_group, n_member_in_group_ptr, manager, time_origin_);
 
             auto& interrupt_binary = hard_int_thread[ith]->integrateToTime(dt);
+            if (InnerPar::phase_on) {
+                const PS::F64 pa = hard_int_thread[ith]->phase_ar;
+                const PS::F64 ps = hard_int_thread[ith]->phase_single;
+                const PS::F64 pt = hard_int_thread[ith]->phase_all;
+                const PS::F64 pf = hard_int_thread[ith]->h4_int.force_time;
+#pragma omp critical(par_phase_stats)
+                {
+                    if (pt > InnerPar::g_phase_all) {
+                        InnerPar::g_phase_all = pt;
+                        InnerPar::g_phase_ar = pa;
+                        InnerPar::g_phase_single = ps;
+                        InnerPar::g_phase_force = pf;
+                    }
+                }
+            }
 
             if (interrupt_binary.status!=AR::InterruptStatus::none) {
                 #pragma omp atomic capture
@@ -2514,6 +2562,8 @@ public:
             }
 #endif
 
+            // [PAR v2] 必须恢复，否则本线程下一轮树相位仍会看到 level 2
+            InnerPar::leaveCluster();
         }
 
         // regist interrupted hard integrator
