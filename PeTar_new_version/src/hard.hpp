@@ -184,6 +184,7 @@ public:
 #endif
 
     PS::F64 phase_ar, phase_single, phase_all; ///> [PHASE] per-cluster timers
+    PS::S32 cluster_index; ///> index of the cluster currently held by this integrator (test7e: deterministic interrupt order)
     bool use_sym_int;  ///> use AR integrator flag
     bool is_initialized; ///> indicator whether initialization is done
 #if defined(BSE_BASE) && defined(FROZEN_BINARY)
@@ -207,6 +208,7 @@ public:
                       table_neighbor_exist(), n_neighbor_zero(0),
 #endif
                       phase_ar(0), phase_single(0), phase_all(0),
+                      cluster_index(-1),
                       use_sym_int(true), is_initialized(false)
 #if defined(BSE_BASE) && defined(FROZEN_BINARY)
                       , frozen_kepler(false)
@@ -1293,6 +1295,7 @@ public:
         time_origin = 0;
         ptcl_origin = NULL;
         interrupt_binary.clear();
+        cluster_index = -1;
         is_initialized = false;
 #if defined(BSE_BASE) && defined(FROZEN_BINARY)
         frozen_kepler = false;
@@ -2511,6 +2514,7 @@ public:
 
             // if interrupt exist, escape initial
             hard_int_thread[ith]->initial(ptcl_hard_.getPointer(adr_head), n_ptcl, ptcl_artificial_ptr, n_group, n_member_in_group_ptr, manager, time_origin_);
+            hard_int_thread[ith]->cluster_index = i;
 
             auto& interrupt_binary = hard_int_thread[ith]->integrateToTime(dt);
             if (InnerPar::phase_on) {
@@ -2600,15 +2604,41 @@ public:
 #endif
 
         // regist interrupted hard integrator
+        // test7e: build the list in cluster-index order instead of slot
+        // (completion) order, so every later reduction and diagnostic is
+        // independent of thread scheduling.
         assert(interrupt_list_.size()==0);
-        for (auto iptr = hard_int_; iptr<hard_int_front_ptr; iptr++) 
-            if (iptr->is_initialized) {
+        {
+            struct InterruptEntry {
+                PS::S32 cluster_index;
+                PS::S32 slot;
+                InterruptEntry(const PS::S32 _cluster_index, const PS::S32 _slot)
+                    : cluster_index(_cluster_index), slot(_slot) {}
+            };
+            std::vector<InterruptEntry> interrupt_entries;
+            const PS::S32 n_hard_int_used = static_cast<PS::S32>(hard_int_front_ptr - hard_int_);
+            for (PS::S32 slot=0; slot<n_hard_int_used; slot++) {
+                HardIntegrator* iptr = &hard_int_[slot];
+                if (!iptr->is_initialized) continue;
                 assert(iptr->interrupt_binary.status!=AR::InterruptStatus::none);
+                const PS::S32 ci = iptr->cluster_index;
+                assert(ci>=0 && ci<n_cluster);
+                interrupt_entries.push_back(InterruptEntry(ci, slot));
+            }
+            std::sort(interrupt_entries.begin(), interrupt_entries.end(),
+                      [](const InterruptEntry& a, const InterruptEntry& b) {
+                          return (a.cluster_index!=b.cluster_index
+                                  ? a.cluster_index<b.cluster_index
+                                  : a.slot<b.slot);
+                      });
+            for (PS::S32 k=0; k<static_cast<PS::S32>(interrupt_entries.size()); k++) {
+                HardIntegrator* iptr = &hard_int_[interrupt_entries[k].slot];
 #ifdef HARD_INTERRUPT_PRINT
                 iptr->printInterruptBinaryInfo(std::cerr);
 #endif
                 interrupt_list_.push_back(iptr);
             }
+        }
 
 
         // advance time_origin if all clusters finished
@@ -2668,22 +2698,29 @@ public:
 #endif
         
         // record new interrupt list
+        // test7e: stable compaction preserves the cluster-index order built in
+        // driveForMultiClusterOMP.  The old swap-with-tail compaction made the
+        // order of the next pass depend on which clusters finished in this one.
         PS::S32 i_front = 0;
-        PS::S32 i_end = n_interrupt;
-        while (i_front<i_end) {
-            auto hard_int_front_ptr = interrupt_list_[i_front];
+        for (PS::S32 i=0; i<n_interrupt; i++) {
+            auto hard_int_front_ptr = interrupt_list_[i];
             if (hard_int_front_ptr->interrupt_binary.status!=AR::InterruptStatus::none) {
                 assert(hard_int_front_ptr->is_initialized);
 #ifdef HARD_INTERRUPT_PRINT
                 hard_int_front_ptr->printInterruptBinaryInfo(std::cerr);
 #endif
-                i_front++;
-            }
-            else {
-                interrupt_list_[i_front] = interrupt_list_[--i_end];
-                interrupt_list_.decreaseSize(1);
+                interrupt_list_[i_front++] = hard_int_front_ptr;
             }
         }
+        if (i_front<n_interrupt) interrupt_list_.decreaseSize(n_interrupt-i_front);
+#ifdef HARD_DEBUG
+        {
+            const PS::S32 n_list = static_cast<PS::S32>(interrupt_list_.size());
+            for (PS::S32 i=1; i<n_list; i++) {
+                assert(interrupt_list_[i-1]->cluster_index < interrupt_list_[i]->cluster_index);
+            }
+        }
+#endif
 
         n_interrupt =  interrupt_list_.size();
 
